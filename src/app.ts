@@ -11,10 +11,15 @@ import searchRouter from './routes/search';
 
 export const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production'
+    ? 'https://www.messenger.com'
+    : 'http://localhost:5173',
+  credentials: true,
+}));
 app.use(logger('dev'));
 app.use(express.json());
-app.use(cookieParser());
+app.use(cookieParser(process.env.COOKIE_SECRET ?? 'dev-secret'));
 
 app.use('/users', usersRouter);
 app.use('/conversations', usersConversationsRouter);

@@ -49,10 +49,35 @@ router.post('/login', async (req: Request, res: Response) => {
     if (!match) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+    res.cookie('session', user.id, {
+      httpOnly: true,
+      signed: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
     return res.status(200).json({ username: user.username, id: user.id });
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
   } catch (e: unknown) {
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/logout', (req: Request, res: Response) => {
+  res.clearCookie('session', { httpOnly: true, signed: true, sameSite: 'lax' });
+  res.status(200).json({ ok: true });
+});
+
+router.get('/me', async (req: Request, res: Response) => {
+  const userId = req.signedCookies.session as string | undefined;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    const user = await getUserByUserId(userId);
+    if (!user) return res.status(401).json({ error: 'Not authenticated' });
+    return res.status(200).json({ id: user.id, username: user.username });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    res.status(500).json({ error: `Internal server error: ${message}` });
   }
 });
 
