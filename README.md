@@ -9,27 +9,59 @@ Built to practice system design concepts.
 - **HTTP/WebSocket:** Express + ws
 - **Database:** PostgreSQL (persistence)
 - **Cache/Pub-Sub:** Redis
+- **Search:** Elasticsearch (optional locally)
+
+The frontend lives in a separate repo: [`instant_messenger_frontend`](../instant_messenger_frontend) (React + Vite).
 
 ## Running locally
 
-Prerequisites — make sure PostgreSQL and Redis servers are running:
+### 1. Start Postgres and Redis
 
 ```bash
 redis-cli ping   # should return PONG
 pg_isready       # should return "accepting connections"
 ```
 
-Start two app servers (simulating two separate servers in the cloud):
+If either isn't installed, `brew install redis` / `brew install postgresql@16`, then `brew services start redis` / `brew services start postgresql@16`.
+
+### 2. Configure the database
+
+Create a `.env` file in the project root with a `DATABASE_URL` pointing at a local Postgres database, e.g.:
+
+```
+DATABASE_URL="postgresql://<your-username>@localhost:5432/instant_messenger"
+```
+
+Then create the database and apply migrations:
+
+```bash
+createdb instant_messenger
+npx prisma generate       # generates the Prisma client into src/generated/prisma
+npx prisma migrate deploy # applies existing migrations
+npm run seed               # seeds user1/user2/user3 (passwords password1/password2/password3)
+```
+
+### 3. (Optional) Start Elasticsearch for message search
+
+```bash
+npm run run-elastic-search   # runs Elasticsearch in Docker on localhost:9200
+```
+
+If skipped, the server falls back to `http://localhost:9200` and search/indexing calls will fail, but messaging still works.
+
+### 4. Start two app servers (simulating two separate servers in the cloud)
 
 ```bash
 # Terminal 1
-PORT=3000 npx ts-node src/server.ts
+npm run port3000
 
 # Terminal 2
-PORT=3001 npx ts-node src/server.ts
+npm run port3001
 ```
 
-Then open `test3000.html` and `test3001.html` in a browser. Send a message from one — it should appear in the other.
+### 5. Start the frontend
+
+The old `test3000.html` / `test3001.html` files have been replaced by a real frontend app. See the [frontend README](../instant_messenger_frontend/README.md) for how to run it against these two backend ports.
 
 ## Architecture
 
