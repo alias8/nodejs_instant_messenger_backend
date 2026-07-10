@@ -13,6 +13,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-COPY package.json ./
+# The compiled app itself doesn't need these, but `npx prisma migrate deploy`
+# (run via a one-off ECS task command override) reads schema.prisma directly
+# at runtime to know what to apply.
+COPY --from=build /app/prisma ./prisma
+COPY prisma.config.ts package.json ./
 EXPOSE 3000
 CMD ["node", "dist/server.js"]

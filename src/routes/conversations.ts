@@ -106,7 +106,10 @@ router.get('/:id/messages', async (req: Request, res: Response) => {
     const conversationId = req.params.id as string;
     const joinedSequenceWhenUserJoinedConversation =
       await getJoinedSequenceWhenUserJoinedConversation(conversationId, userId);
-    if (!joinedSequenceWhenUserJoinedConversation) {
+    // joined_seq is a BigInt, and BigInt(0) — a perfectly valid "joined before
+    // any messages existed" value — is falsy in JS, so this must check for
+    // "no membership row found" specifically rather than general falsiness.
+    if (joinedSequenceWhenUserJoinedConversation === undefined) {
       return res
         .status(403)
         .json({ error: `Cannot find joined seq for convo id ${conversationId} user ${userId}` });
