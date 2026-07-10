@@ -43,9 +43,22 @@ npm run seed               # seeds user1/user2/user3 (passwords password1/passwo
 
 ### 3. (Optional) Start Elasticsearch for message search
 
+Requires Docker (e.g. Docker Desktop) to be installed and running.
+
+First time only — this pulls the image and creates a container named `elasticsearch`:
+
 ```bash
 npm run run-elastic-search   # runs Elasticsearch in Docker on localhost:9200
 ```
+
+Subsequent runs — the container already exists, so just start/stop it directly instead of rerunning the script above (which will fail with a "container name already in use" error):
+
+```bash
+docker start elasticsearch
+docker stop elasticsearch
+```
+
+If you need a completely fresh index, remove the container first (`docker rm -f elasticsearch`) then rerun `npm run run-elastic-search`.
 
 If skipped, the server falls back to `http://localhost:9200` and search/indexing calls will fail, but messaging still works.
 
