@@ -21,6 +21,7 @@ model User {
   id                 String               @id @default(uuid())
   username           String               @unique
   password_hash      String
+  is_guest           Boolean              @default(false)
   created_at         DateTime             @default(now())
   messages           Message[] // the relation field (not a DB column, just for Prisma)
   conversationMember ConversationMember[] // the relation field (not a DB column, just for Prisma)

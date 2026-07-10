@@ -14,7 +14,7 @@ const port = process.env.PORT ?? 3000;
  * to the same redis server.
  * The userIdToWsConnectionMap is storing sessions for each server only.
  * */
-const redisPublish = new Redis(); // new Redis() with no arguments uses ioredis defaults: localhost:6379
+export const redisPublish = new Redis(); // new Redis() with no arguments uses ioredis defaults: localhost:6379
 const redisSubscribe = new Redis();
 console.log('james1', process.env.ELASTIC_SEARCH_CLOUD_ID);
 export const elasticSearchClient = process.env.ELASTIC_SEARCH_CLOUD_ID

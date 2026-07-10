@@ -34,3 +34,10 @@ export const createUser = async (username: string, password_hash: string) => {
     select: { id: true, username: true, created_at: true },
   });
 };
+
+export const createGuestUser = async (username: string, password_hash: string) => {
+  return prisma.user.create({
+    data: { username, password_hash, is_guest: true },
+    select: { id: true, username: true, created_at: true },
+  });
+};

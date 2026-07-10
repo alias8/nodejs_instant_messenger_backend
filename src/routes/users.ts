@@ -1,12 +1,16 @@
 import { Router, Request, Response } from 'express';
 import * as bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
 import { Prisma } from '../generated/prisma/client';
 import {
+  createGuestUser,
   createUser,
   getUserByUserId,
   getUserByUsername,
   searchUsersByUsername,
 } from '../utils/db/user';
+import { redisPublish } from '../server';
+import { GuestRole, matchmakeGuest } from '../utils/matchmaking';
 
 const router = Router();
 
@@ -60,6 +64,37 @@ router.post('/login', async (req: Request, res: Response) => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
   } catch (e: unknown) {
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/guest', async (req: Request, res: Response) => {
+  const role = req.query.role as string | undefined;
+  if (role !== 'userA' && role !== 'userB') {
+    return res.status(400).json({ error: 'role must be userA or userB' });
+  }
+  try {
+    const username = `guest-${uuidv4()}`;
+    const password_hash = await bcrypt.hash(uuidv4(), bcryptSaltRounds); // unusable random hash; guest never logs in with a password
+    const user = await createGuestUser(username, password_hash);
+
+    res.cookie('session', user.id, {
+      httpOnly: true,
+      signed: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    const pairing = await matchmakeGuest(redisPublish, role as GuestRole, user.id);
+
+    return res.status(200).json({
+      id: user.id,
+      username: user.username,
+      conversationId: pairing?.conversationId ?? null,
+    });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    res.status(500).json({ error: `Internal server error: ${message}` });
   }
 });
 
