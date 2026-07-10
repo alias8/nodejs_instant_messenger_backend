@@ -11,10 +11,12 @@ import searchRouter from './routes/search';
 
 export const app = express();
 
+// Local dev runs two frontend instances (npm run dev1/dev2) to simulate two
+// separate servers, on ports 5173 and 5174 respectively — both need to be allowed.
+const DEV_ORIGINS = ['http://localhost:5173', 'http://localhost:5174'];
+
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? 'https://www.messenger.com'
-    : 'http://localhost:5173',
+  origin: process.env.NODE_ENV === 'production' ? 'https://www.messenger.com' : DEV_ORIGINS,
   credentials: true,
 }));
 app.use(logger('dev'));
