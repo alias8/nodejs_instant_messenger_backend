@@ -78,11 +78,17 @@ export class ConnectionManager {
 
   handleCloseConnection(ws: WebSocket, userId: string) {
     ws.on('close', async () => {
-      await this.remove(userId);
+      await this.remove(userId, ws);
     });
   }
 
-  async remove(userId: string) {
+  async remove(userId: string, ws: WebSocket) {
+    // If a newer connection for this user has already replaced this one (e.g. React
+    // StrictMode's double-mount opening two sockets on login), don't tear down the
+    // live connection just because the stale one closed.
+    if (this.userIdToWsConnectionMap.get(userId) !== ws) {
+      return;
+    }
     // 1. Remove userId from websocket connection map
     this.userIdToWsConnectionMap.delete(userId);
     // 2. Remove user from redis subscription
