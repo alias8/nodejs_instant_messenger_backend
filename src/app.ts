@@ -14,14 +14,19 @@ export const app = express();
 // Local dev runs two frontend instances (npm run dev1/dev2) to simulate two
 // separate servers, on ports 5173 and 5174 respectively — both need to be allowed.
 const DEV_ORIGINS = ['http://localhost:5173', 'http://localhost:5174'];
+const CORS_ORIGINS = process.env.CORS_ORIGINS?.split(',');
 
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' ? 'https://www.messenger.com' : DEV_ORIGINS,
+  origin: CORS_ORIGINS ?? (process.env.NODE_ENV === 'production' ? [] : DEV_ORIGINS),
   credentials: true,
 }));
 app.use(logger('dev'));
 app.use(express.json());
 app.use(cookieParser(process.env.COOKIE_SECRET ?? 'dev-secret'));
+
+app.get('/health', (_req: Request, res: Response) => {
+  res.sendStatus(200);
+});
 
 app.use('/users', usersRouter);
 app.use('/conversations', usersConversationsRouter);

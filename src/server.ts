@@ -14,8 +14,9 @@ const port = process.env.PORT ?? 3000;
  * to the same redis server.
  * The userIdToWsConnectionMap is storing sessions for each server only.
  * */
-export const redisPublish = new Redis(); // new Redis() with no arguments uses ioredis defaults: localhost:6379
-const redisSubscribe = new Redis();
+const redisUrl = process.env.REDIS_URL;
+export const redisPublish = redisUrl ? new Redis(redisUrl) : new Redis(); // new Redis() with no arguments uses ioredis defaults: localhost:6379
+const redisSubscribe = redisUrl ? new Redis(redisUrl) : new Redis();
 console.log('james1', process.env.ELASTIC_SEARCH_CLOUD_ID);
 export const elasticSearchClient = process.env.ELASTIC_SEARCH_CLOUD_ID
   ? new Client({
@@ -58,4 +59,10 @@ async function setupElasticSearch() {
   }
   await ensureIndex();
 }
-setupElasticSearch().catch(console.error);
+// Skip entirely when running in production with no real Elasticsearch/OpenSearch
+// configured, so a deployment that intentionally omits it doesn't slow-fail
+// against an unreachable localhost:9200 on every boot. Locally this still runs
+// as before, tolerating a missing local ES via the .catch below.
+if (process.env.ELASTIC_SEARCH_CLOUD_ID || process.env.NODE_ENV !== 'production') {
+  setupElasticSearch().catch(console.error);
+}
