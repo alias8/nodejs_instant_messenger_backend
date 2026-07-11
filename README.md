@@ -76,6 +76,64 @@ npm run port3001
 
 The old `test3000.html` / `test3001.html` files have been replaced by a real frontend app. See the [frontend README](../instant_messenger_frontend/README.md) for how to run it against these two backend ports.
 
+## Deploying to AWS
+
+Infrastructure lives in `infra/terraform/` (Terraform) and covers both the backend (ECS Fargate, ALB, RDS, ElastiCache) and both frontend deployments (S3 + CloudFront for `usera`/`userb`). See `infra/terraform/*.tf` for the full resource list.
+
+### Prerequisites (one-time)
+
+- A domain registered (e.g. via the Route 53 console) with a public hosted zone.
+- AWS CLI installed and configured with credentials that have sufficient permissions (`aws configure`).
+- Docker running (for building the backend image).
+- Terraform installed (`brew install hashicorp/tap/terraform`).
+- `infra/terraform/terraform.tfvars` created from `terraform.tfvars.example` with your `domain_name` set.
+
+### Initial deploy
+
+```bash
+cd infra/terraform
+terraform init
+terraform apply -var-file=terraform.tfvars   # provisions everything; takes ~10-15 min first time
+```
+
+This creates the infrastructure but doesn't put any content in it — the ECR repo is empty, the database has no schema, and the S3 buckets are empty. Deploy the app itself, in this order:
+
+```bash
+# 1. Build + push the backend image, roll out the ECS service
+bash scripts/deploy-backend.sh
+
+# 2. Apply Prisma migrations against RDS (one-off ECS task)
+bash scripts/run-migration.sh
+
+# 3. Build + deploy both frontends to S3/CloudFront
+FRONTEND_DIR=/path/to/instant_messenger_frontend \
+VITE_API_BASE_URL=https://api.<your-domain> \
+  bash scripts/deploy-frontend.sh
+```
+
+Your two resume links are then `https://usera.<your-domain>` and `https://userb.<your-domain>`.
+
+### Redeploying after changes
+
+- **Backend code changed** → `bash scripts/deploy-backend.sh` (rebuilds the image, pushes to ECR, forces a new ECS deployment). If the Prisma schema changed, also run `bash scripts/run-migration.sh` afterward.
+- **Frontend code changed** → rerun step 3 above (`deploy-frontend.sh` with the same env vars) — it rebuilds both role variants, syncs them to S3, and invalidates CloudFront so the new build serves immediately.
+- **Infrastructure changed** (edited a `.tf` file) → from `infra/terraform/`:
+  ```bash
+  terraform plan -var-file=terraform.tfvars    # review first
+  terraform apply -var-file=terraform.tfvars
+  ```
+
+### Tearing it down
+
+```bash
+cd infra/terraform
+terraform destroy -var-file=terraform.tfvars
+```
+
+Everything is configured for a clean teardown (`skip_final_snapshot`, `deletion_protection = false`, `force_destroy` on all buckets, `force_delete` on the ECR repo), so this removes the whole stack without manual cleanup. The Route 53 **hosted zone** isn't touched — it's referenced as a Terraform data source (created by domain registration, not by `apply`), so your domain and nameservers stay intact and you can `apply` again later without re-registering anything.
+
+Since this project only needs to be live occasionally (e.g. around interviews), `destroy` when idle and `apply` again beforehand is the cheapest way to run it. Running continuously costs roughly $70-80/month (RDS ~$13, ElastiCache ~$10, ALB ~$18, Fargate's 2 tasks ~$30, CloudFront/S3/Route 53/ECR/ACM/SSM together under $5) — idle time between `destroy` and `apply` costs nothing beyond the ~$0.50/month Route 53 hosted zone.
+
 ## Architecture
 
 ### How multi-server messaging works
