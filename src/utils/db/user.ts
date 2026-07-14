@@ -3,7 +3,7 @@ import { prisma } from '../../db/prisma';
 export const searchUsersByUsername = async (username: string) => {
   return prisma.user.findMany({
     where: { username: { contains: username } },
-    select: { id: true, username: true },
+    select: { id: true, username: true, is_guest: true },
   });
 };
 
@@ -16,7 +16,7 @@ export const getUserByUsername = async (username: string) => {
 export const getUserByUserId = async (userId: string) => {
   return prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, username: true },
+    select: { id: true, username: true, is_guest: true },
   });
 };
 

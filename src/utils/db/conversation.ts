@@ -4,7 +4,9 @@ export const getConversationsForUserId = async (userId: string) => {
   return prisma.conversation.findMany({
     where: { conversationMember: { some: { user_id: userId } } },
     include: {
-      conversationMember: { include: { user: { select: { id: true, username: true } } } },
+      conversationMember: {
+        include: { user: { select: { id: true, username: true, is_guest: true } } },
+      },
     },
     orderBy: { created_at: 'desc' },
   });
