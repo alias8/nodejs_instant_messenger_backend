@@ -88,35 +88,19 @@ Infrastructure lives in `infra/terraform/` (Terraform) and covers both the backe
 - Terraform installed (`brew install hashicorp/tap/terraform`).
 - `infra/terraform/terraform.tfvars` created from `terraform.tfvars.example` with your `domain_name` set.
 
+Four npm scripts (in `infra/terraform/scripts/`) cover the whole lifecycle. All of them expect the frontend checkout as a sibling directory (`../instant_messenger_frontend`); override with `FRONTEND_DIR` if yours lives elsewhere.
+
 ### Initial deploy
 
 ```bash
-cd infra/terraform
-terraform init
-terraform apply -var-file=terraform.tfvars   # provisions everything; takes ~10-15 min first time
+npm run initial-deploy
 ```
 
-This creates the infrastructure but doesn't put any content in it — the ECR repo is empty, the database has no schema, and the S3 buckets are empty. Deploy the app itself, in this order:
-
-```bash
-# 1. Build + push the backend image, roll out the ECS service
-bash scripts/deploy-backend.sh
-
-# 2. Apply Prisma migrations against RDS (one-off ECS task)
-bash scripts/run-migration.sh
-
-# 3. Build + deploy both frontends to S3/CloudFront
-FRONTEND_DIR=/path/to/instant_messenger_frontend \
-VITE_API_BASE_URL=https://api.<your-domain> \
-  bash scripts/deploy-frontend.sh
-```
-
-Your two resume links are then `https://usera.<your-domain>` and `https://userb.<your-domain>`.
+Runs `terraform init`, then `terraform apply -var-file=terraform.tfvars` (provisions everything; takes ~10-15 min first time), then deploys the app into it: backend image → Prisma migrations → both frontends. Your two resume links are then `https://usera.<your-domain>` and `https://userb.<your-domain>`.
 
 ### Redeploying after changes
 
-- **Backend code changed** → `bash scripts/deploy-backend.sh` (rebuilds the image, pushes to ECR, forces a new ECS deployment). If the Prisma schema changed, also run `bash scripts/run-migration.sh` afterward.
-- **Frontend code changed** → rerun step 3 above (`deploy-frontend.sh` with the same env vars) — it rebuilds both role variants, syncs them to S3, and invalidates CloudFront so the new build serves immediately.
+- **Backend, schema, and/or frontend code changed** → `npm run update-changes` (rebuilds + pushes the backend image, forces a new ECS deployment, applies any new Prisma migrations, then rebuilds and syncs both frontends and invalidates their CloudFront caches). Safe to run even when only one side changed — an unchanged frontend build/migration is just a fast no-op.
 - **Infrastructure changed** (edited a `.tf` file) → from `infra/terraform/`:
   ```bash
   terraform plan -var-file=terraform.tfvars    # review first
@@ -126,13 +110,20 @@ Your two resume links are then `https://usera.<your-domain>` and `https://userb.
 ### Tearing it down
 
 ```bash
-cd infra/terraform
-terraform destroy -var-file=terraform.tfvars
+npm run teardown
 ```
 
-Everything is configured for a clean teardown (`skip_final_snapshot`, `deletion_protection = false`, `force_destroy` on all buckets, `force_delete` on the ECR repo), so this removes the whole stack without manual cleanup. The Route 53 **hosted zone** isn't touched — it's referenced as a Terraform data source (created by domain registration, not by `apply`), so your domain and nameservers stay intact and you can `apply` again later without re-registering anything.
+Runs `terraform destroy -var-file=terraform.tfvars`. Everything is configured for a clean teardown (`skip_final_snapshot`, `deletion_protection = false`, `force_destroy` on all buckets, `force_delete` on the ECR repo), so this removes the whole stack without manual cleanup. The Route 53 **hosted zone** isn't touched — it's referenced as a Terraform data source (created by domain registration, not by `apply`), so your domain and nameservers stay intact and you can restore later without re-registering anything.
 
-Since this project only needs to be live occasionally (e.g. around interviews), `destroy` when idle and `apply` again beforehand is the cheapest way to run it. Running continuously costs roughly $70-80/month (RDS ~$13, ElastiCache ~$10, ALB ~$18, Fargate's 2 tasks ~$30, CloudFront/S3/Route 53/ECR/ACM/SSM together under $5) — idle time between `destroy` and `apply` costs nothing beyond the ~$0.50/month Route 53 hosted zone.
+Since this project only needs to be live occasionally (e.g. around interviews), tearing down when idle and restoring again beforehand is the cheapest way to run it. Running continuously costs roughly $70-80/month (RDS ~$13, ElastiCache ~$10, ALB ~$18, Fargate's 2 tasks ~$30, CloudFront/S3/Route 53/ECR/ACM/SSM together under $5) — idle time after teardown costs nothing beyond the ~$0.50/month Route 53 hosted zone.
+
+### Restoring after a teardown
+
+```bash
+npm run restore-after-teardown
+```
+
+`npm run update-changes` alone only works once the infrastructure exists — after a teardown there's no ECR repo or ECS service for it to find. `restore-after-teardown` runs `terraform apply` and then the same backend → migrations → frontend deploy as `update-changes`, so you can go from a torn-down state back to fully live in one command.
 
 ## Architecture
 
