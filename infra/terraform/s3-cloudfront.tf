@@ -202,6 +202,21 @@ resource "aws_s3_bucket_public_access_block" "media" {
   restrict_public_buckets = true
 }
 
+# The frontend uploads files with a browser PUT straight to this bucket via a
+# presigned URL (see media.ts) — reads go through CloudFront instead, but the
+# upload path needs its own CORS rule or the browser's preflight fails.
+resource "aws_s3_bucket_cors_configuration" "media" {
+  bucket = aws_s3_bucket.media.id
+
+  cors_rule {
+    allowed_methods = ["PUT"]
+    allowed_origins = ["https://usera.${var.domain_name}", "https://userb.${var.domain_name}"]
+    allowed_headers = ["*"]
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3000
+  }
+}
+
 resource "tls_private_key" "cloudfront_signer" {
   algorithm = "RSA"
   rsa_bits  = 2048
