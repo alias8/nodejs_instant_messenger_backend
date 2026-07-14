@@ -217,6 +217,28 @@ resource "aws_s3_bucket_cors_configuration" "media" {
   }
 }
 
+# Demo uploads (recruiters' test photos, etc.) aren't otherwise cleaned up
+# between deploy/teardown cycles — self-expire them instead of relying on
+# remembering to terraform destroy.
+resource "aws_s3_bucket_lifecycle_configuration" "media" {
+  bucket = aws_s3_bucket.media.id
+
+  rule {
+    id     = "expire-uploads"
+    status = "Enabled"
+
+    filter {}
+
+    expiration {
+      days = 7
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+}
+
 resource "tls_private_key" "cloudfront_signer" {
   algorithm = "RSA"
   rsa_bits  = 2048
