@@ -6,12 +6,26 @@ Built to practice system design concepts.
 ## Tech Stack
 
 - **Runtime:** Node.js + TypeScript
-- **HTTP/WebSocket:** Express + ws
+- **HTTP/WebSocket:** NestJS (Express platform under the hood) + `ws`, via `@nestjs/platform-ws`
 - **Database:** PostgreSQL (persistence)
 - **Cache/Pub-Sub:** Redis
 - **Search:** Elasticsearch (optional locally)
 
 The frontend lives in a separate repo: [`instant_messenger_frontend`](../instant_messenger_frontend) (React + Vite).
+
+## Project structure
+
+The backend is organized as NestJS modules under `src/`, each a self-contained folder of `*.module.ts` + `*.controller.ts` + `*.service.ts`:
+
+- `users/` — register/login/guest/session endpoints, plus guest matchmaking
+- `conversations/` — conversation + message history endpoints
+- `media/` — S3/CloudFront presigned URL endpoints
+- `search/` — Elasticsearch message search
+- `messaging/` — the WebSocket gateway (`ChatGateway`) and the service that persists/fans out incoming messages (`ChatMessageService`)
+- `connection/` — `ConnectionManagerService`, the in-memory userId↔WebSocket map and Redis subscription bookkeeping, shared by `messaging/` and `conversations/` (for large-conversation fan-out)
+- `prisma/`, `redis/`, `elasticsearch/` — infrastructure modules exposing `PrismaService` and injectable Redis/Elasticsearch clients to the rest of the app via Nest's dependency injection
+
+`src/main.ts` is the entrypoint: it bootstraps the Nest app, configures CORS/cookies/logging, and attaches the WebSocket gateway to the same HTTP server via `@nestjs/platform-ws`'s `WsAdapter`.
 
 ## Running locally
 
@@ -71,6 +85,8 @@ npm run port3000
 # Terminal 2
 npm run port3001
 ```
+
+For hot-reload on a single instance during development, use `npm run start:dev` instead (e.g. `PORT=3000 npm run start:dev`).
 
 ### 5. Start the frontend
 
@@ -162,11 +178,13 @@ Redis and Postgres are **shared services** — every app server connects to the 
        (browser)                      (browser)
 ```
 
+The "ConnectionManager" boxes above are the `ConnectionManagerService`, injected into a NestJS `ChatGateway` (`@WebSocketGateway()`). Nest's `WsAdapter` (from `@nestjs/platform-ws`) attaches the gateway's WebSocket server to the same underlying HTTP server the REST API runs on, so both still share a single port per app instance, same as before.
+
 ### Step-by-step: userA sends a message to userB
 
 1. **userA's browser** sends a WebSocket frame to Server A.
 
-2. **Server A** (`MessageService`):
+2. **Server A** (`ChatMessageService`, invoked by `ConnectionManagerService` on `message`):
    - Calls Redis `INCR` to get a sequence number (avoids clock skew across servers)
    - Inserts the message into Postgres (message is now persisted)
    - Queries Postgres to find who the recipient is
@@ -174,7 +192,7 @@ Redis and Postgres are **shared services** — every app server connects to the 
 
 3. **Redis** broadcasts the `user:B` channel event to all subscribers.
 
-4. **Server B** (`ConnectionManager`):
+4. **Server B** (`ConnectionManagerService`, subscribed to Redis in its constructor):
    - It subscribed to `user:B` when userB first opened their WebSocket connection
    - Redis delivers the message to Server B only (no other server subscribed to `user:B`)
    - Server B looks up userB's WebSocket in its local in-memory map

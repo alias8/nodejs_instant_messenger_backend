@@ -1,13 +1,18 @@
+import { Inject, Injectable } from '@nestjs/common';
 import { Redis } from 'ioredis';
-import { MessageType, PrismaClient } from './generated/prisma/client';
-import { ESMessage, Message } from './models/models';
 import { Client } from '@elastic/elasticsearch';
+import { PrismaService } from '../prisma/prisma.service';
+import { REDIS_PUBLISH } from '../redis/redis.constants';
+import { ELASTICSEARCH_CLIENT, MESSAGES_INDEX } from '../elasticsearch/elasticsearch.constants';
+import { ESMessage, Message } from '../models/models';
+import { IncomingMessageHandler } from '../connection/connection-manager.service';
 
-export class MessageService {
+@Injectable()
+export class ChatMessageService implements IncomingMessageHandler {
   constructor(
-    private prisma: PrismaClient,
-    private redisPublish: Redis,
-    private elasticSearchClient: Client,
+    private readonly prisma: PrismaService,
+    @Inject(REDIS_PUBLISH) private readonly redisPublish: Redis,
+    @Inject(ELASTICSEARCH_CLIENT) private readonly elasticSearchClient: Client,
   ) {}
 
   async handleIncoming(parsedMessage: Message) {
@@ -27,7 +32,7 @@ export class MessageService {
 
     this.elasticSearchClient
       .index<ESMessage>({
-        index: 'messages',
+        index: MESSAGES_INDEX,
         id: message.id,
         document: {
           conversation_id,

@@ -3,10 +3,10 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY prisma ./prisma
-COPY prisma.config.ts tsconfig.json ./
+COPY prisma.config.ts tsconfig.json nest-cli.json ./
 COPY src ./src
 RUN npx prisma generate
-RUN npx tsc
+RUN npx nest build
 
 FROM node:22-slim AS runtime
 WORKDIR /app
@@ -19,4 +19,4 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 COPY prisma.config.ts package.json ./
 EXPOSE 3000
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/main.js"]

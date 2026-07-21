@@ -1,0 +1,2 @@
+export const REDIS_PUBLISH = 'REDIS_PUBLISH';
+export const REDIS_SUBSCRIBE = 'REDIS_SUBSCRIBE';

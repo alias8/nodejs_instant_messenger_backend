@@ -1,18 +1,23 @@
+import { Inject, Injectable } from '@nestjs/common';
 import { Redis } from 'ioredis';
-import { WebSocket as WsWebSocket, WebSocket } from 'ws';
+import { WebSocket } from 'ws';
 import { URL } from 'node:url';
-import { Message } from './models/models';
 import http from 'http';
-import { MessageService } from './MessageService';
-import { prisma } from './db/prisma';
+import { REDIS_SUBSCRIBE } from '../redis/redis.constants';
+import { Message } from '../models/models';
 
-export class ConnectionManager {
+export interface IncomingMessageHandler {
+  handleIncoming(message: Message): Promise<void>;
+}
+
+@Injectable()
+export class ConnectionManagerService {
   // userId: Websocket map
-  private userIdToWsConnectionMap = new Map<string, WsWebSocket>();
+  private userIdToWsConnectionMap = new Map<string, WebSocket>();
   // a map of conversationId → Set of userIds connected on this server
   private conversationIdToUsersMap = new Map<string, Set<string>>();
 
-  constructor(private redisSubscribe: Redis) {
+  constructor(@Inject(REDIS_SUBSCRIBE) private redisSubscribe: Redis) {
     this.redisSubscribe.on('messageBuffer', async (channel, message) => {
       if (channel.toString().startsWith('user:')) {
         // 4. Redis received a message from userA to userB. Only the 1 server that userB is on will run this listener
@@ -34,11 +39,11 @@ export class ConnectionManager {
   /*
    1. Connection setup (before the message)
   Both users connected earlier via WebSocket to ws://localhost:3000?userId=A and ws://localhost:3001?userId=B.
-  When each connected, ConnectionManager.add() did two things:
+  When each connected, ConnectionManagerService.add() did two things:
   - Stored their socket in userIdToWsConnectionMap (userId → ws)
   - Subscribed Redis to the channel user:<userId> for that user
   * */
-  handleConnection(ws: WebSocket, req: http.IncomingMessage, messageService: MessageService) {
+  handleConnection(ws: WebSocket, req: http.IncomingMessage, messageService: IncomingMessageHandler) {
     const userId = this.getUserId(ws, req);
     if (userId) {
       this.add(userId, ws);
@@ -60,7 +65,7 @@ export class ConnectionManager {
     });
   }
 
-  handleMessages(ws: WebSocket, messageService: MessageService) {
+  handleMessages(ws: WebSocket, messageService: IncomingMessageHandler) {
     ws.on('message', async (message) => {
       /*
       2. userA's client sends a JSON frame over their WebSocket:
